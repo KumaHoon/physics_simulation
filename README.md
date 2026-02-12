@@ -10,9 +10,9 @@ A hybrid quantum-classical simulation demonstrating **"One Waveguide (Hardware),
 
 ## 🎬 Live Demo
 
-The dashboard sweeps pump power from 0 → 400 mW, showing the Wigner function evolving from vacuum (circular) to a squeezed state (elliptical) in real-time:
+The dashboard sweeps pump power from 0 → 200 mW (squeezed ellipse forms), then increases propagation loss from 0 → 2 dB (decoherence restores the circular vacuum shape):
 
-![Demo: Power Sweep](assets/demo_power_sweep.gif)
+![Demo: Calibration](assets/calibration_demo.gif)
 
 ---
 

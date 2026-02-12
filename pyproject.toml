@@ -1,5 +1,5 @@
 [project]
-name = "physics-simulation"
+name = "quantum-optical-bus-simulation"
 version = "0.1.0"
 description = "A modern physics simulation using marimo and uv"
 readme = "README.md"
@@ -10,11 +10,13 @@ dependencies = [
     "scipy",
     "pandas",
     "matplotlib",
+    "strawberryfields",
+    "meep",
 ]
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = ["simulation"]
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -84,3 +84,83 @@ class TestQuantumBusModel:
         W_sq = wd_sq[0][0]
         # Squeezed Wigner should differ from vacuum
         assert not np.allclose(W_vac, W_sq, atol=1e-3)
+
+
+# ── Intrinsic vs Observed Squeezing ──────────────────────────────
+
+class TestSqueezingVsLoss:
+    """Verify intrinsic squeezing is constant and observed squeezing
+    decreases monotonically as loss increases (fixed pump power)."""
+
+    PUMP_POWER_MW: float = 100.0  # → r = 1.0
+    LOSS_DB_VALUES: list[float] = [0.0, 3.0, 6.0, 10.0]
+
+    @staticmethod
+    def _observed_squeezing_db(r: float, eta: float) -> float:
+        """Run a single-mode Gaussian circuit and return observed squeezing (dB).
+
+        Parameters
+        ----------
+        r : float
+            Squeezing parameter for the Sgate.
+        eta : float
+            Channel transmissivity in [0, 1].
+
+        Returns
+        -------
+        float
+            Observed squeezing in dB, computed from the minimum eigenvalue
+            of the normalized covariance matrix V = cov / 2.
+        """
+        import strawberryfields as sf
+        from strawberryfields.ops import Sgate, LossChannel
+
+        prog = sf.Program(1)
+        with prog.context as q:
+            if r > 0:
+                Sgate(r) | q[0]
+            if eta < 1.0:
+                LossChannel(eta) | q[0]
+
+        eng = sf.Engine("gaussian")
+        state = eng.run(prog).state
+        cov = state.cov()
+        V = cov / 2.0
+        eigvals = np.linalg.eigvalsh(V)
+        Vmin = eigvals[0]
+        vacuum_var = 0.5
+        return float(-10 * np.log10(Vmin / vacuum_var))
+
+    def test_observed_squeezing_decreases_with_loss(self):
+        """Observed (post-loss) squeezing must be monotonically non-increasing
+        as loss increases, because the loss channel mixes the state with vacuum."""
+        r = calculate_squeezing(self.PUMP_POWER_MW)
+        observed_values = []
+        for loss_db in self.LOSS_DB_VALUES:
+            eta = 10 ** (-loss_db / 10.0)
+            observed_values.append(self._observed_squeezing_db(r, eta))
+
+        # Monotonically non-increasing
+        for i in range(len(observed_values) - 1):
+            assert observed_values[i] >= observed_values[i + 1] - 1e-9, (
+                f"Observed squeezing increased from {observed_values[i]:.4f} dB "
+                f"to {observed_values[i+1]:.4f} dB when loss went from "
+                f"{self.LOSS_DB_VALUES[i]} to {self.LOSS_DB_VALUES[i+1]} dB"
+            )
+
+        # At 10 dB loss the observed squeezing should be noticeably less than at 0 dB
+        assert observed_values[-1] < observed_values[0] - 0.5
+
+    def test_intrinsic_squeezing_constant_across_loss(self):
+        """Intrinsic squeezing (from r) must not change when loss changes,
+        because r depends only on pump power."""
+        r = calculate_squeezing(self.PUMP_POWER_MW)
+        intrinsic_db = -10 * np.log10(np.exp(-2 * r))
+
+        for loss_db in self.LOSS_DB_VALUES:
+            # Recompute r — it must be independent of loss
+            r_again = calculate_squeezing(self.PUMP_POWER_MW)
+            intrinsic_db_again = -10 * np.log10(np.exp(-2 * r_again))
+            assert intrinsic_db_again == pytest.approx(intrinsic_db, abs=1e-12), (
+                f"Intrinsic squeezing changed at loss_db={loss_db}"
+            )

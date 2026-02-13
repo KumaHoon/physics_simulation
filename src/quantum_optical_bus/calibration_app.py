@@ -155,7 +155,7 @@ with st.sidebar:
 ETA = 0.1  # same value used in interface.py
 
 r_param = calculate_squeezing(pump_power_mw)
-squeezing_db = -10 * np.log10(np.exp(-2 * r_param)) if r_param > 0 else 0.0
+intrinsic_squeezing_db = -10 * np.log10(np.exp(-2 * r_param)) if r_param > 0 else 0.0
 
 # Loss model: convert dB/cm + length → transmissivity η_loss ∈ [0, 1]
 total_loss_db = loss_db_cm * (wg_length_mm / 10.0)        # mm → cm
@@ -241,18 +241,19 @@ with col_formula:
         rf"r = {ETA:.2f} \times \sqrt{{{pump_power_mw:.0f}\;\text{{mW}}}}"
         rf"\;=\; \mathbf{{{r_param:.4f}}}"
     )
-    st.markdown("**Squeezing Level:**")
+    st.markdown("**Intrinsic Squeezing (pre-loss):**")
     st.latex(
-        rf"\text{{Squeezing}} = -10\,\log_{{10}}\!\bigl(e^{{-2r}}\bigr)"
-        rf"\;=\; \mathbf{{{squeezing_db:.2f}\;\text{{dB}}}}"
+        rf"\text{{Intrinsic sq.}} = -10\,\log_{{10}}\!\bigl(e^{{-2r}}\bigr)"
+        rf"\;=\; \mathbf{{{intrinsic_squeezing_db:.2f}\;\text{{dB}}}}"
     )
+    st.caption("Computed from r only (pump power). Does not include propagation/detection loss.")
     if loss_db_cm > 0:
         st.markdown(f"**Channel transmissivity** $\\eta_{{\\text{{loss}}}}$ = `{eta_loss:.4f}`  "
                     f"({total_loss_db:.2f} dB total loss over {wg_length_mm:.1f} mm)")
     st.markdown("</div>", unsafe_allow_html=True)
 
 # Live P → r curve
-st.markdown("#### Power–Squeezing Calibration Curve")
+st.markdown("#### Power–Squeezing Calibration Curve  *(intrinsic, pre-loss)*")
 powers_curve = np.linspace(0, 500, 300)
 r_curve = ETA * np.sqrt(powers_curve)
 db_curve = -10 * np.log10(np.exp(-2 * r_curve))
@@ -260,11 +261,11 @@ db_curve = -10 * np.log10(np.exp(-2 * r_curve))
 fig_cal, ax_cal = plt.subplots(figsize=(8, 3.5))
 ax_cal.plot(powers_curve, db_curve, color="#58a6ff", linewidth=2, label=r"$-10\log_{10}(e^{-2r})$")
 ax_cal.axvline(pump_power_mw, color="#f97583", linestyle="--", linewidth=1.2, label=f"P = {pump_power_mw:.0f} mW")
-ax_cal.axhline(squeezing_db, color="#f97583", linestyle=":", linewidth=0.8, alpha=0.6)
-ax_cal.scatter([pump_power_mw], [squeezing_db], color="#f97583", zorder=5, s=60)
+ax_cal.axhline(intrinsic_squeezing_db, color="#f97583", linestyle=":", linewidth=0.8, alpha=0.6)
+ax_cal.scatter([pump_power_mw], [intrinsic_squeezing_db], color="#f97583", zorder=5, s=60)
 ax_cal.set_xlabel("Pump Power  P  (mW)")
-ax_cal.set_ylabel("Squeezing  (dB)")
-ax_cal.set_title(r"Calibration Curve:  $r = \eta\sqrt{P}$")
+ax_cal.set_ylabel("Intrinsic Squeezing (pre-loss)  (dB)")
+ax_cal.set_title(r"Calibration Curve:  $r = \eta\sqrt{P}$  (intrinsic, pre-loss)")
 ax_cal.legend(loc="lower right")
 ax_cal.grid(True, alpha=0.25)
 fig_cal.tight_layout()
@@ -289,7 +290,21 @@ xvec = np.linspace(-GRID_LIMIT, GRID_LIMIT, GRID_POINTS)
 
 @st.cache_data(show_spinner="Running Strawberry Fields …")
 def _run_quantum(r: float, theta: float, eta: float):
-    """Run a single-mode Gaussian simulation and return the Wigner function."""
+    """Run a single-mode Gaussian simulation and return state metrics.
+
+    Returns
+    -------
+    W : ndarray
+        Wigner function on the grid.
+    mean_photon : float
+        Mean photon number of the output state.
+    var_x, var_p : float
+        Quadrature variances (ħ = 1 convention).
+    observed_sq_db : float
+        Observed (post-loss) squeezing in dB, from covariance eigenvalues.
+    observed_antisq_db : float
+        Observed (post-loss) anti-squeezing in dB.
+    """
     prog = sf.Program(1)
     with prog.context as q:
         if r > 0:
@@ -312,10 +327,21 @@ def _run_quantum(r: float, theta: float, eta: float):
     var_x = cov[0, 0] / 2.0   # ħ = 1 convention
     var_p = cov[1, 1] / 2.0
 
-    return W, mean_photon, var_x, var_p
+    # Observed squeezing from principal variances of the output state
+    V = cov / 2.0  # same normalization as var_x/var_p
+    eigvals = np.linalg.eigvalsh(V)
+    Vmin = eigvals[0]
+    Vmax = eigvals[-1]
+    vacuum_var = 0.5
+    observed_sq_db = float(-10 * np.log10(Vmin / vacuum_var)) if Vmin > 0 else 0.0
+    observed_antisq_db = float(10 * np.log10(Vmax / vacuum_var)) if Vmax > 0 else 0.0
+
+    return W, mean_photon, var_x, var_p, observed_sq_db, observed_antisq_db
 
 
-W, mean_photon, var_x, var_p = _run_quantum(r_param, phase_rad, eta_loss)
+W, mean_photon, var_x, var_p, observed_sq_db, observed_antisq_db = _run_quantum(
+    r_param, phase_rad, eta_loss
+)
 
 # ---------- Tab 1: Wigner Function ----------
 with tab_wigner:
@@ -336,10 +362,19 @@ with tab_wigner:
         plt.close(fig_w)
 
     with col_wig_info:
-        st.metric("Squeezing", f"{squeezing_db:.2f} dB")
+        st.metric("Intrinsic squeezing (pre-loss)", f"{intrinsic_squeezing_db:.2f} dB",
+                  help="Computed from r only (pump power). Does not include propagation/detection loss.")
+        st.metric("Observed squeezing (post-loss)", f"{observed_sq_db:.2f} dB",
+                  help="Computed from output covariance eigenvalues after LossChannel.")
+        st.metric("Observed anti-squeezing", f"{observed_antisq_db:.2f} dB",
+                  help="Anti-squeezed quadrature of the output state.")
         st.metric("Mean Photon #", f"{mean_photon:.2f}")
         if loss_db_cm > 0:
-            st.info("🔍 The Wigner function becomes **more circular** as loss increases — this is decoherence.")
+            st.info(
+                "🔍 Loss changes the **observed squeezing** (output state), "
+                "not the intrinsic *r* parameter. The Wigner function becomes "
+                "more circular as loss increases — this is decoherence."
+            )
 
 # ---------- Tab 2: Photon Number Distribution ----------
 with tab_photon:

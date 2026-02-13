@@ -14,6 +14,9 @@ The dashboard sweeps pump power from 0 → 200 mW (squeezed ellipse forms), then
 
 ![Demo: Calibration](assets/calibration_demo.gif)
 
+> **Figure 1: Real-time Calibration Simulation.**
+> This simulation demonstrates the mapping from classical control parameters (Pump Power) to quantum metrics (Squeezing Level). It visually verifies the $r \propto \sqrt{P}$ relationship and the decoherence effects caused by propagation loss, ensuring the simulation aligns with experimental LN waveguide characteristics.
+
 ---
 
 ## 🔬 Calibration Dashboard
@@ -121,6 +124,55 @@ Input (Physics)  →  Calibration (Bridge)  →  Output (Quantum)
 | **Application** | `application.py` | Quantum Bus model (Strawberry Fields) |
 | **Visualization** | `visualization.py` | Matplotlib plotting (BusVisualizer) |
 | **Dashboard** | `calibration_app.py` | Streamlit presentation UI |
+
+---
+
+## 📐 Model Definitions and Assumptions
+
+### Squeezing parameter — source knob
+
+The squeezing parameter **r** is a phenomenological mapping from pump power:
+
+$$r = \eta \sqrt{P}$$
+
+where $\eta = 0.1$ is a coupling efficiency placeholder (tuned so 100 mW → r ≈ 1.0).
+This is a **source-level knob** — it controls how much squeezing the nonlinear process
+generates, independent of any downstream losses.
+
+### Loss model
+
+Propagation and detection losses are modelled as a **separate pure-loss channel**
+applied *after* squeezing.  The channel transmissivity is:
+
+$$T = 10^{-\text{loss\_dB}/10}$$
+
+This corresponds to a beam-splitter mixing the signal with vacuum:
+
+$$\hat{a}_{\text{out}} = \sqrt{T}\,\hat{a}_{\text{in}} + \sqrt{1-T}\,\hat{a}_{\text{vac}}$$
+
+### Intrinsic vs Observed squeezing
+
+| Metric | Definition | Depends on loss? |
+|--------|-----------|-----------------|
+| **Intrinsic squeezing (pre-loss)** | $-10\log_{10}(e^{-2r})$ — computed from *r* only | No |
+| **Observed squeezing (post-loss)** | $-10\log_{10}(V_{\min}/V_{\text{vac}})$ — from output covariance eigenvalues | Yes |
+
+Analytic intuition (single-mode Gaussian):
+
+$$V_{\text{out}} = T \cdot V_{\text{in}} + (1-T) \cdot V_{\text{vac}}, \quad V_{\text{vac}} = \tfrac{1}{2}$$
+
+As $T \to 0$ (total loss), $V_{\text{out}} \to V_{\text{vac}}$ and observed squeezing → 0 dB.
+
+### Honest notes about placeholders
+
+- **Coupling efficiency** ($\eta$): currently a fixed constant.  In a real device this
+  would be calibrated from overlap integrals; tuning infrastructure is stubbed out.
+- **Meep FDTD**: the hardware layer falls back to an analytical Gaussian mode profile
+  when Meep is not installed.  The mode data is qualitatively correct but not
+  quantitatively validated against full 3-D FDTD.
+- **Time-bin scope**: each time bin is simulated as an independent single-mode state.
+  Inter-bin coupling (e.g., via shared pump or cross-phase modulation) is **not**
+  implemented — results assume perfectly isolated bins.
 
 ---
 

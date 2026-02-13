@@ -2,8 +2,8 @@
 Generate a professional calibration demo GIF for grad school portfolio.
 
 Two-phase animation:
-  Phase 1 — Power ramp (0 → 200 mW): vacuum circle flattens into squeezed ellipse
-  Phase 2 — Loss ramp  (0 → 2 dB):   squeezed ellipse becomes round/fuzzy (decoherence)
+  Phase 1 -- Power ramp (0 -> 200 mW): vacuum circle flattens into squeezed ellipse
+  Phase 2 -- Loss ramp  (0 -> 2 dB):   squeezed ellipse becomes round/fuzzy (decoherence)
 
 Output: assets/calibration_demo.gif
 
@@ -30,20 +30,20 @@ import matplotlib.patches as mpatches
 import strawberryfields as sf
 from strawberryfields.ops import Sgate, LossChannel
 
-# ── Output ────────────────────────────────────────────────────────
+# -- Output ----------------------------------------------------------------
 ASSETS = pathlib.Path(__file__).resolve().parents[1] / "assets"
 ASSETS.mkdir(parents=True, exist_ok=True)
 OUT_PATH = ASSETS / "calibration_demo.gif"
 
-# ── Physics constants ─────────────────────────────────────────────
+# -- Physics constants -----------------------------------------------------
 ETA = 0.05          # coupling: r = eta * sqrt(P)
 GRID_LIM = 5.0
-GRID_PTS = 100
+GRID_PTS = 120      # higher resolution for smoother contours
 xvec = np.linspace(-GRID_LIM, GRID_LIM, GRID_PTS)
 
-# ── Animation timeline ────────────────────────────────────────────
-N_PHASE1 = 40       # frames: power 0 → 200 mW
-N_PHASE2 = 30       # frames: loss  0 → 2 dB
+# -- Animation timeline ----------------------------------------------------
+N_PHASE1 = 40       # frames: power 0 -> 200 mW
+N_PHASE2 = 30       # frames: loss  0 -> 2 dB
 N_TOTAL = N_PHASE1 + N_PHASE2
 
 powers = np.concatenate([
@@ -55,7 +55,7 @@ losses_db = np.concatenate([
     np.linspace(0, 2.0, N_PHASE2),
 ])
 
-# ── Pre-compute all Wigner functions ─────────────────────────────
+# -- Pre-compute all Wigner functions --------------------------------------
 print(f"Pre-computing {N_TOTAL} Wigner frames ...")
 cache = []
 for i in range(N_TOTAL):
@@ -63,7 +63,7 @@ for i in range(N_TOTAL):
     L_db = losses_db[i]
 
     r = ETA * np.sqrt(P)
-    sq_db = -10 * np.log10(np.exp(-2 * r)) if r > 0 else 0.0
+    intrinsic_sq_db = -10 * np.log10(np.exp(-2 * r)) if r > 0 else 0.0
     transmittance = 10 ** (-L_db / 10.0) if L_db > 0 else 1.0
 
     prog = sf.Program(1)
@@ -79,66 +79,84 @@ for i in range(N_TOTAL):
     var_x = cov[0, 0] / 2.0
     var_p = cov[1, 1] / 2.0
 
+    # Observed squeezing from covariance eigenvalues
+    V = cov / 2.0
+    eigvals = np.linalg.eigvalsh(V)
+    Vmin = eigvals[0]
+    vacuum_var = 0.5
+    observed_sq_db = float(-10 * np.log10(Vmin / vacuum_var)) if Vmin > 0 else 0.0
+
     cache.append({
-        "W": W, "r": r, "sq_db": sq_db,
+        "W": W, "r": r, "intrinsic_sq_db": intrinsic_sq_db,
+        "observed_sq_db": observed_sq_db,
         "P": P, "L_db": L_db,
         "transmittance": transmittance,
         "var_x": var_x, "var_p": var_p,
     })
 print("Done.")
 
-# ── Dark theme ────────────────────────────────────────────────────
-BG      = "#0e1117"
-PANEL   = "#161b22"
-ACCENT  = "#58a6ff"
-RED     = "#ff6b6b"
-GREEN   = "#3fb950"
-ORANGE  = "#f0883e"
-GRAY    = "#8b949e"
-WHITE   = "#e6edf3"
+# -- Whitesmoke lab theme --------------------------------------------------
+BG        = "#f5f5f5"    # whitesmoke
+PANEL     = "#ffffff"    # white panels
+ACCENT    = "#1a73e8"    # blue
+RED       = "#d93025"    # bold red
+GREEN     = "#188038"    # green
+ORANGE    = "#e37400"    # orange
+GRAY      = "#5f6368"    # text gray
+DARK      = "#202124"    # dark text
+LIGHT_BRD = "#dadce0"    # light border
+
+# Vacuum reference circle (radius = sqrt(0.5) for shot noise in x-p space)
+VACUUM_RADIUS = np.sqrt(1.0)  # unit circle for reference
 
 plt.rcParams.update({
     "figure.facecolor": BG,
     "axes.facecolor": PANEL,
-    "axes.edgecolor": GRAY,
-    "axes.labelcolor": WHITE,
-    "text.color": WHITE,
+    "axes.edgecolor": LIGHT_BRD,
+    "axes.labelcolor": DARK,
+    "text.color": DARK,
     "xtick.color": GRAY,
     "ytick.color": GRAY,
-    "font.family": "monospace",
-    "font.size": 11,
+    "font.family": "sans-serif",
+    "font.size": 13,
 })
 
-# ── Figure layout ─────────────────────────────────────────────────
-fig = plt.figure(figsize=(14, 6))
+# -- Figure layout ---------------------------------------------------------
+fig = plt.figure(figsize=(15, 7))
 
 # Left panel: dashboard metrics
-ax_dash = fig.add_axes([0.04, 0.08, 0.38, 0.82])
+ax_dash = fig.add_axes([0.03, 0.06, 0.38, 0.82])
 ax_dash.set_xlim(0, 10)
 ax_dash.set_ylim(0, 10)
 ax_dash.axis("off")
 
 # Right panel: Wigner function
-ax_wig = fig.add_axes([0.50, 0.08, 0.46, 0.82])
+ax_wig = fig.add_axes([0.48, 0.06, 0.48, 0.82])
 
 # Title
-fig.text(0.50, 0.96,
-         "TDM Optical Bus  \u2014  Squeezed Light Calibration",
-         ha="center", fontsize=16, fontweight="bold", color=WHITE)
+fig.text(0.50, 0.95,
+         "Figure 1: Real-time Calibration Simulation",
+         ha="center", fontsize=18, fontweight="bold", color=DARK)
+fig.text(0.50, 0.91,
+         "TDM Optical Bus  \u2014  Squeezed Light Source",
+         ha="center", fontsize=13, color=GRAY)
 
 
 def draw_bar(ax, x, y, w, h, frac, color, label_left, label_right):
     """Draw a horizontal progress bar."""
+    # Background track
     ax.add_patch(mpatches.FancyBboxPatch(
         (x, y), w, h, boxstyle="round,pad=0.08",
-        facecolor="#21262d", edgecolor=GRAY, linewidth=0.8))
-    ax.add_patch(mpatches.FancyBboxPatch(
-        (x, y), w * frac, h, boxstyle="round,pad=0.08",
-        facecolor=color, edgecolor="none", alpha=0.85))
+        facecolor="#e8eaed", edgecolor=LIGHT_BRD, linewidth=0.8))
+    # Filled portion
+    if frac > 0.005:
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (x, y), max(w * frac, 0.15), h, boxstyle="round,pad=0.08",
+            facecolor=color, edgecolor="none", alpha=0.85))
     ax.text(x - 0.15, y + h / 2, label_left,
-            ha="right", va="center", fontsize=10, color=GRAY)
+            ha="right", va="center", fontsize=14, color=GRAY, fontweight="bold")
     ax.text(x + w + 0.15, y + h / 2, label_right,
-            ha="left", va="center", fontsize=10, color=WHITE, fontweight="bold")
+            ha="left", va="center", fontsize=15, color=DARK, fontweight="bold")
 
 
 def update(frame):
@@ -146,84 +164,99 @@ def update(frame):
     phase = "Phase 1: Power Sweep" if frame < N_PHASE1 else "Phase 2: Loss Channel"
     phase_color = ACCENT if frame < N_PHASE1 else ORANGE
 
-    # ── Left panel ──
+    # -- Left panel --
     ax_dash.cla()
     ax_dash.set_xlim(0, 10)
     ax_dash.set_ylim(0, 10)
     ax_dash.axis("off")
 
-    # Phase indicator
+    # Phase indicator pill
     ax_dash.add_patch(mpatches.FancyBboxPatch(
-        (0.3, 8.8), 9.2, 0.9, boxstyle="round,pad=0.15",
-        facecolor=phase_color, edgecolor="none", alpha=0.2))
-    ax_dash.text(4.9, 9.25, phase, ha="center", va="center",
-                 fontsize=13, fontweight="bold", color=phase_color)
+        (0.3, 8.7), 9.2, 1.0, boxstyle="round,pad=0.18",
+        facecolor=phase_color, edgecolor="none", alpha=0.12))
+    ax_dash.text(4.9, 9.2, phase, ha="center", va="center",
+                 fontsize=15, fontweight="bold", color=phase_color)
 
     # Pump Power bar
-    draw_bar(ax_dash, 3.0, 7.6, 5.5, 0.55,
+    draw_bar(ax_dash, 3.2, 7.4, 5.2, 0.6,
              d["P"] / 200.0, ACCENT,
              "Pump Power", f'{d["P"]:.0f} mW')
 
     # Loss bar
-    draw_bar(ax_dash, 3.0, 6.6, 5.5, 0.55,
+    draw_bar(ax_dash, 3.2, 6.3, 5.2, 0.6,
              d["L_db"] / 2.0, ORANGE,
-             "Loss", f'{d["L_db"]:.2f} dB')
+             "Prop. Loss", f'{d["L_db"]:.2f} dB')
 
     # Divider
-    ax_dash.plot([0.5, 9.5], [6.15, 6.15], color=GRAY, lw=0.5, alpha=0.4)
+    ax_dash.plot([0.5, 9.5], [5.85, 5.85], color=LIGHT_BRD, lw=1.0)
 
-    # Metrics
-    ax_dash.text(4.9, 5.5, "Calibration Metrics",
-                 ha="center", fontsize=12, fontweight="bold", color=WHITE)
+    # Section header
+    ax_dash.text(4.9, 5.35, "CALIBRATION METRICS",
+                 ha="center", fontsize=13, fontweight="bold",
+                 color=GRAY, style="italic")
 
     # r parameter
-    ax_dash.text(1.0, 4.6, "Squeezing Param (r):", fontsize=11, color=GRAY)
-    ax_dash.text(8.5, 4.6, f"{d['r']:.4f}", fontsize=13,
+    ax_dash.text(0.8, 4.4, "Squeezing Param (r):", fontsize=14, color=GRAY)
+    ax_dash.text(9.0, 4.4, f"{d['r']:.4f}", fontsize=16,
                  fontweight="bold", color=GREEN, ha="right")
 
-    # Squeezing dB — large and red
+    # ---- Squeezing dB: show BOTH intrinsic and observed ----
     ax_dash.add_patch(mpatches.FancyBboxPatch(
-        (0.5, 2.9), 9.0, 1.3, boxstyle="round,pad=0.15",
-        facecolor="#2d1015", edgecolor=RED, linewidth=1.5, alpha=0.7))
-    ax_dash.text(4.9, 3.85, "SQUEEZING LEVEL",
+        (0.4, 2.2), 9.2, 2.2, boxstyle="round,pad=0.18",
+        facecolor="#fce8e6", edgecolor=RED, linewidth=2.0))
+    ax_dash.text(4.9, 4.0, "INTRINSIC SQUEEZING (pre-loss)",
                  ha="center", fontsize=10, color=GRAY, fontweight="bold")
-    ax_dash.text(4.9, 3.25, f"-{d['sq_db']:.2f} dB",
-                 ha="center", fontsize=22, fontweight="bold", color=RED)
-
-    # Quadrature variances
-    ax_dash.text(1.0, 2.2, "Var(x):", fontsize=10, color=GRAY)
-    ax_dash.text(3.5, 2.2, f"{d['var_x']:.4f}", fontsize=11,
-                 fontweight="bold", color=GREEN)
-    ax_dash.text(5.5, 2.2, "Var(p):", fontsize=10, color=GRAY)
-    ax_dash.text(8.0, 2.2, f"{d['var_p']:.4f}", fontsize=11,
-                 fontweight="bold", color=RED)
+    ax_dash.text(4.9, 3.4, f"{d['intrinsic_sq_db']:.2f} dB",
+                 ha="center", fontsize=20, fontweight="bold", color=GRAY)
+    ax_dash.text(4.9, 2.85, "OBSERVED SQUEEZING (post-loss)",
+                 ha="center", fontsize=10, color=RED, fontweight="bold")
+    ax_dash.text(4.9, 2.35, f"{d['observed_sq_db']:.2f} dB",
+                 ha="center", fontsize=24, fontweight="bold", color=RED)
 
     # Transmissivity
-    ax_dash.text(1.0, 1.4, "Transmissivity:", fontsize=10, color=GRAY)
+    ax_dash.text(0.8, 1.0, "Transmissivity:", fontsize=13, color=GRAY)
     eta_str = f"{d['transmittance']:.4f}"
-    eta_color = GREEN if d["transmittance"] > 0.9 else (ORANGE if d["transmittance"] > 0.5 else RED)
-    ax_dash.text(5.5, 1.4, eta_str, fontsize=11, fontweight="bold", color=eta_color)
+    if d["transmittance"] > 0.9:
+        eta_color = GREEN
+    elif d["transmittance"] > 0.5:
+        eta_color = ORANGE
+    else:
+        eta_color = RED
+    ax_dash.text(5.5, 1.0, eta_str, fontsize=14, fontweight="bold", color=eta_color)
 
     # Frame counter
-    ax_dash.text(4.9, 0.3, f"Frame {frame + 1}/{N_TOTAL}",
-                 ha="center", fontsize=9, color=GRAY, alpha=0.6)
+    ax_dash.text(4.9, 0.15, f"Frame {frame + 1}/{N_TOTAL}",
+                 ha="center", fontsize=10, color=GRAY, alpha=0.5)
 
-    # ── Right panel: Wigner ──
+    # -- Right panel: Wigner --
     ax_wig.cla()
-    ax_wig.contourf(xvec, xvec, d["W"], levels=80, cmap="RdBu_r")
+    # Smooth contour with many levels
+    ax_wig.contourf(xvec, xvec, d["W"], levels=120, cmap="RdBu_r")
+    ax_wig.contour(xvec, xvec, d["W"], levels=30, colors="k",
+                   linewidths=0.15, alpha=0.3)
+
+    # Vacuum reference circle (dashed)
+    theta = np.linspace(0, 2 * np.pi, 200)
+    ax_wig.plot(VACUUM_RADIUS * np.cos(theta),
+                VACUUM_RADIUS * np.sin(theta),
+                linestyle="--", color="#555555", linewidth=1.2,
+                alpha=0.7, label="Vacuum reference")
+    ax_wig.legend(loc="upper right", fontsize=10, framealpha=0.8,
+                  edgecolor=LIGHT_BRD)
+
     ax_wig.set_xlim(-GRID_LIM, GRID_LIM)
     ax_wig.set_ylim(-GRID_LIM, GRID_LIM)
-    ax_wig.set_xlabel("x  (position quadrature)", fontsize=11)
-    ax_wig.set_ylabel("p  (momentum quadrature)", fontsize=11)
+    ax_wig.set_xlabel("x  (position quadrature)", fontsize=14)
+    ax_wig.set_ylabel("p  (momentum quadrature)", fontsize=14)
     ax_wig.set_title(
         f"Wigner Function    r = {d['r']:.3f}",
-        fontsize=13, fontweight="bold", color=WHITE, pad=10)
+        fontsize=15, fontweight="bold", color=DARK, pad=10)
     ax_wig.set_aspect("equal")
-    ax_wig.grid(True, alpha=0.08, color=GRAY)
+    ax_wig.grid(True, alpha=0.12, color=GRAY)
 
 
 print(f"Rendering {N_TOTAL} frames ...")
 anim = FuncAnimation(fig, update, frames=N_TOTAL, blit=False)
-anim.save(str(OUT_PATH), writer=PillowWriter(fps=8), dpi=110)
+anim.save(str(OUT_PATH), writer=PillowWriter(fps=8), dpi=120)
 plt.close(fig)
 print(f"[OK] Saved to {OUT_PATH}")

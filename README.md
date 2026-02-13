@@ -1,10 +1,10 @@
 # Quantum Optical Bus — Calibration Dashboard
 
-[![CI](https://github.com/KumaHoon/physics_simulation/actions/workflows/ci.yml/badge.svg)](https://github.com/KumaHoon/physics_simulation/actions/workflows/ci.yml)
+[![CI](https://github.com/KumaHoon/Quantum-Optical-Bus-Simulation/actions/workflows/ci.yml/badge.svg)](https://github.com/KumaHoon/Quantum-Optical-Bus-Simulation/actions/workflows/ci.yml)
 
 A hybrid quantum-classical simulation demonstrating **"One Waveguide (Hardware), Infinite States (Software)"** — with a **Calibration Dashboard** that exposes the physics mapping classical FDTD parameters to continuous-variable (CV) quantum states.
 
-✨ Computes the **actual squeezing parameter (*r*)** based on the waveguide's material properties and geometry. The calibration logic is **interactive and transparent**.
+✨ Computes a **transparent squeezing calibration** $r = \eta\sqrt{P}$ (currently phenomenological; replaceable with a physical model derived from mode overlap / $\chi^{(2)}$ / geometry). The calibration logic is **interactive and transparent**.
 
 ---
 

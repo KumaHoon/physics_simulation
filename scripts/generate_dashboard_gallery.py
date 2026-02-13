@@ -25,11 +25,9 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import FancyArrowPatch
 
-import strawberryfields as sf
-from strawberryfields.ops import Sgate, Rgate, LossChannel
-
 from quantum_optical_bus.hardware import run_hardware_simulation, WaveguideConfig
 from quantum_optical_bus.interface import calculate_squeezing
+from quantum_optical_bus.quantum import run_single_mode
 
 ASSETS_DIR = pathlib.Path(__file__).resolve().parents[1] / "assets"
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,28 +66,9 @@ def _dark_style():
 
 
 def _run_quantum(r, theta, eta_loss):
-    """Single-mode Gaussian sim → Wigner, mean_photon, var_x, var_p, observed_sq_db."""
-    prog = sf.Program(1)
-    with prog.context as q:
-        if r > 0:
-            Sgate(r) | q[0]
-        if theta != 0:
-            Rgate(theta) | q[0]
-        if eta_loss < 1.0:
-            LossChannel(eta_loss) | q[0]
-    result = sf.Engine("gaussian").run(prog)
-    state = result.state
-    W = state.wigner(0, xvec, xvec)
-    mean_n = state.mean_photon(0)[0]
-    cov = state.cov()
-    var_x = cov[0, 0] / 2
-    var_p = cov[1, 1] / 2
-    # Observed squeezing from covariance eigenvalues
-    V = cov / 2.0
-    eigvals = np.linalg.eigvalsh(V)
-    Vmin = eigvals[0]
-    observed_sq_db = float(-10 * np.log10(Vmin / 0.5)) if Vmin > 0 else 0.0
-    return W, mean_n, var_x, var_p, observed_sq_db
+    """Thin wrapper around shared ``run_single_mode``."""
+    res = run_single_mode(r, theta, eta_loss, xvec)
+    return res.W, res.mean_photon, res.var_x, res.var_p, res.observed_sq_db
 
 
 # ──────────────────────────────────────────────────────────────────

@@ -26,16 +26,18 @@ for _p in (_SRC_DIR, _PROJECT_ROOT):
 # Compat patches — must come before strawberryfields import
 import quantum_optical_bus.compat  # noqa: F401, E402
 
+import io
+import contextlib
+from math import comb, factorial
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import streamlit as st
 
-import strawberryfields as sf
-from strawberryfields.ops import Sgate, Rgate, LossChannel
-
 from quantum_optical_bus.hardware import run_hardware_simulation, WaveguideConfig
 from quantum_optical_bus.interface import calculate_squeezing
+from quantum_optical_bus.quantum import run_single_mode
 
 # ──────────────────────────────────────────────────────────────────────
 # Page configuration
@@ -180,9 +182,8 @@ st.markdown("### Phase 1 · The Device — LN Ridge Waveguide")
 col_hw_plot, col_hw_info = st.columns([3, 2])
 
 # Run hardware simulation (mock Gaussian mode — Meep fallback is silent)
-import io as _io, contextlib as _ctxlib
 cfg = WaveguideConfig()
-with _ctxlib.redirect_stdout(_io.StringIO()), _ctxlib.redirect_stderr(_io.StringIO()):
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     n_eff, mode_area, ez_data, extent = run_hardware_simulation(cfg)
 
 with col_hw_plot:
@@ -294,53 +295,9 @@ xvec = np.linspace(-GRID_LIMIT, GRID_LIMIT, GRID_POINTS)
 
 @st.cache_data(show_spinner="Running Strawberry Fields …")
 def _run_quantum(r: float, theta: float, eta: float):
-    """Run a single-mode Gaussian simulation and return state metrics.
-
-    Returns
-    -------
-    W : ndarray
-        Wigner function on the grid.
-    mean_photon : float
-        Mean photon number of the output state.
-    var_x, var_p : float
-        Quadrature variances (ħ = 1 convention).
-    observed_sq_db : float
-        Observed (post-loss) squeezing in dB, from covariance eigenvalues.
-    observed_antisq_db : float
-        Observed (post-loss) anti-squeezing in dB.
-    """
-    prog = sf.Program(1)
-    with prog.context as q:
-        if r > 0:
-            Sgate(r) | q[0]
-        if theta != 0:
-            Rgate(theta) | q[0]
-        if eta < 1.0:
-            LossChannel(eta) | q[0]
-
-    eng = sf.Engine("gaussian")
-    result = eng.run(prog)
-    state = result.state
-
-    W = state.wigner(0, xvec, xvec)
-    mean_photon = state.mean_photon(0)[0]
-
-    # Quadrature variances: x = (a + a†)/√2,  p = i(a† - a)/√2
-    # For Gaussian states we can read from the covariance matrix.
-    cov = state.cov()
-    var_x = cov[0, 0] / 2.0   # ħ = 1 convention
-    var_p = cov[1, 1] / 2.0
-
-    # Observed squeezing from principal variances of the output state
-    V = cov / 2.0  # same normalization as var_x/var_p
-    eigvals = np.linalg.eigvalsh(V)
-    Vmin = eigvals[0]
-    Vmax = eigvals[-1]
-    vacuum_var = 0.5
-    observed_sq_db = float(-10 * np.log10(Vmin / vacuum_var)) if Vmin > 0 else 0.0
-    observed_antisq_db = float(10 * np.log10(Vmax / vacuum_var)) if Vmax > 0 else 0.0
-
-    return W, mean_photon, var_x, var_p, observed_sq_db, observed_antisq_db
+    """Thin cached wrapper around the shared ``run_single_mode``."""
+    res = run_single_mode(r, theta, eta, xvec)
+    return res.W, res.mean_photon, res.var_x, res.var_p, res.observed_sq_db, res.observed_antisq_db
 
 
 W, mean_photon, var_x, var_p, observed_sq_db, observed_antisq_db = _run_quantum(
@@ -399,7 +356,6 @@ with tab_photon:
         probs = np.zeros(max_n + 1)
         for n in range(0, max_n + 1, 2):
             k = n // 2
-            from math import comb, factorial
             probs[n] = (factorial(n) / (factorial(k) ** 2 * 4 ** k)) * (tanh_r ** n) / cosh_r
         # If loss > 0 the distribution broadens; approximate by mixing with thermal
         if eta_loss < 1.0:

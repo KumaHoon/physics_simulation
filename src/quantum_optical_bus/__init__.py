@@ -7,10 +7,13 @@ A hybrid quantum-classical simulation demonstrating
 
 from .hardware import run_hardware_simulation, WaveguideConfig
 from .interface import calculate_squeezing
+from .quantum import run_single_mode, QuantumResult
 
 __all__ = [
     "run_hardware_simulation",
     "WaveguideConfig",
     "calculate_squeezing",
+    "run_single_mode",
+    "QuantumResult",
 ]
 
